@@ -1,0 +1,38 @@
+version: '3.8'
+services:
+  argocd:
+    image: argoproj/argocd:latest
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    environment:
+      ARGOCD_SERVER_INSECURE: "true"
+    volumes:
+      - argocd-data:/var/lib/argocd
+
+  argocd-repo-server:
+    image: argoproj/argocd:latest
+    command: argocd-repo-server
+    ports:
+      - "8081:8081"
+    volumes:
+      - argocd-data:/var/lib/argocd
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+
+volumes:
+  argocd-data:
