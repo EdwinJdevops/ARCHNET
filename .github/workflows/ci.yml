@@ -52,6 +52,9 @@ jobs:
       - name: Test infrastructure safety guard
         run: python -m unittest discover -s tests -v
 
+      - name: Verify cloud deployment safety lock
+        run: python scripts/check_cloud_lock.py
+
       - name: Deny public SSH and Kubernetes API ingress
         run: python scripts/check_infrastructure_safety.py
 
