@@ -64,6 +64,9 @@ jobs:
       - name: Initialize without remote backend
         working-directory: terraform
         run: terraform init -backend=false -input=false
+      - name: Check Terraform formatting
+        working-directory: terraform
+        run: terraform fmt -check -recursive -diff
       - name: Validate Terraform configuration
         working-directory: terraform
         run: terraform validate -no-color
