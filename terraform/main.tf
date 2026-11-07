@@ -88,6 +88,7 @@ resource "aws_security_group" "archnet" {
 }
 
 resource "aws_instance" "k3s" {
+  count = var.enable_cloud_deployment ? 1 : 0
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   subnet_id              = aws_subnet.public.id
@@ -100,6 +101,8 @@ resource "aws_instance" "k3s" {
     delete_on_termination = true
   }
 
-  user_data = base64encode(file("${path.module}/../k3s/install.sh"))
+  # No bootstrap is configured: the previous referenced script was absent.
+  # Cloud provisioning is disabled until an audited bootstrap and access path exist.
+  user_data = null
   tags      = { Name = "archnet-k3s-master" }
 }
