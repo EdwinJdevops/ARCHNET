@@ -49,6 +49,9 @@ jobs:
             test -d "$dir" || { echo "Missing: $dir" >&2; exit 1; }
           done
 
+      - name: Test infrastructure safety guard
+        run: python -m unittest discover -s tests -v
+
       - name: Deny public SSH and Kubernetes API ingress
         run: python scripts/check_infrastructure_safety.py
 
