@@ -1,4 +1,4 @@
-name: Archnet CI/CD
+name: Archnet validation
 
 on:
   push:
@@ -6,38 +6,61 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Validate YAML files
+      - name: Validate YAML syntax
+        shell: bash
         run: |
-          find . -name "*.yml" -o -name "*.yaml" | head -20
-          echo "YAML structure validated"
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check PyYAML==6.0.2
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+          paths = sorted([*Path('.').rglob('*.yaml'), *Path('.').rglob('*.yml')])
+          if not paths:
+              raise SystemExit('No YAML files found')
+          for path in paths:
+              with path.open(encoding='utf-8') as stream:
+                  list(yaml.safe_load_all(stream))
+              print('Parsed:', path)
+          PY
 
-      - name: Validate Shell Scripts
+      - name: Validate shell syntax
+        shell: bash
         run: |
-          find . -name "*.sh" -exec bash -n {} \;
-          echo "Shell scripts OK"
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            bash -n "$file"
+          done < <(find . -type f -name '*.sh' -print0)
 
-      - name: Check Project Structure
+      - name: Validate required directories
+        shell: bash
         run: |
-          ls -la
-          echo "terraform/ argocd/ observability/ apps/ docs/ k3s/" | tr ' ' '\n' | while read dir; do
-            [ -d "$dir" ] && echo "OK: $dir exists" || echo "MISSING: $dir"
+          set -euo pipefail
+          for dir in terraform argocd observability apps docs k3s; do
+            test -d "$dir" || { echo "Missing: $dir" >&2; exit 1; }
           done
+
+      - name: Deny public SSH and Kubernetes API ingress
+        run: python scripts/check_infrastructure_safety.py
 
   security:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Run Trivy
+      - uses: actions/checkout@v4
+      - name: Scan filesystem with Trivy
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
           scan-ref: .
           severity: CRITICAL
-          exit-code: 0
+          exit-code: '1'
