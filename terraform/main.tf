@@ -88,7 +88,7 @@ resource "aws_security_group" "archnet" {
 }
 
 resource "aws_instance" "k3s" {
-  count = var.enable_cloud_deployment ? 1 : 0
+  count                  = var.enable_cloud_deployment ? 1 : 0
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   subnet_id              = aws_subnet.public.id
