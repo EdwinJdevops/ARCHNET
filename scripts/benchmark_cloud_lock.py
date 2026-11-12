@@ -37,13 +37,25 @@ def main():
             relative = Path("terraform") / name
             shutil.copyfile(REPO / relative, root / relative)
         check(root, "clean source", 0, "PASS: provider-free Terraform source")
-        shutil.copyfile(FIXTURE, root / "terraform/unexpected.tf")
+        unexpected = root / "terraform/unexpected.tf"
+        shutil.copyfile(FIXTURE, unexpected)
         check(
             root,
             "unexpected declaration",
             1,
             "Unexpected Terraform source inventory: ['terraform/main.tf', "
             "'terraform/unexpected.tf', 'terraform/variables.tf']",
+        )
+        unexpected.unlink()
+
+        with (root / "terraform/main.tf").open("ab") as source:
+            source.write(b"\n" + FIXTURE.read_bytes())
+        check(
+            root,
+            "declaration appended to approved file",
+            1,
+            "Terraform source differs from the reviewed cloud-disabled root: "
+            "terraform/main.tf",
         )
 
 
