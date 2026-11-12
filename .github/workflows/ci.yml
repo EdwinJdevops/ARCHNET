@@ -14,7 +14,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Validate YAML syntax
         shell: bash
@@ -55,15 +57,19 @@ jobs:
       - name: Verify cloud deployment safety lock
         run: python scripts/check_cloud_lock.py
 
-      - name: Deny public SSH and Kubernetes API ingress
-        run: python scripts/check_infrastructure_safety.py
-
   terraform:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.12.2
+          terraform_wrapper: false
+      - name: Check provider-free source before Terraform execution
+        run: python scripts/check_cloud_lock.py
       - name: Initialize without remote backend
         working-directory: terraform
         run: terraform init -backend=false -input=false
@@ -74,14 +80,59 @@ jobs:
         working-directory: terraform
         run: terraform validate -no-color
 
+      - name: Verify empty Terraform plan and deny enablement
+        working-directory: terraform
+        env:
+          CHECKPOINT_DISABLE: '1'
+          AWS_EC2_METADATA_DISABLED: 'true'
+        run: |
+          set -euo pipefail
+          plan_dir=$(mktemp -d)
+          trap 'rm -rf -- "$plan_dir"' EXIT
+          terraform plan -input=false -refresh=false -detailed-exitcode -out="$plan_dir/disabled.tfplan"
+          terraform show -json "$plan_dir/disabled.tfplan" | jq -e '
+            .format_version == "1.2" and .errored == false and
+            .variables.enable_cloud_deployment.value == false and
+            ((.resource_changes // []) | length == 0) and
+            ((.resource_drift // []) | length == 0) and
+            ((.output_changes // {}) | length == 0) and
+            ((.configuration.provider_config // {}) | length == 0) and
+            ((.configuration.root_module.resources // []) | length == 0) and
+            ((.configuration.root_module.module_calls // {}) | length == 0)
+          '
+          if terraform plan -input=false -refresh=false -no-color -var=enable_cloud_deployment=true >"$plan_dir/denied.log" 2>&1; then
+            echo "Cloud enablement unexpectedly passed" >&2
+            exit 1
+          fi
+          cat "$plan_dir/denied.log"
+          grep -F 'Cloud deployment is intentionally disabled.' "$plan_dir/denied.log"
+
+  kubernetes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install pinned kind CLI
+        run: |
+          GOBIN="$RUNNER_TEMP/bin" go install sigs.k8s.io/kind@v0.30.0
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Verify disposable Kubernetes control plane
+        run: bash scripts/smoke_kind.sh
+
   security:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - name: Scan filesystem with Trivy
-        uses: aquasecurity/trivy-action@master
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          persist-credentials: false
+      - name: Scan filesystem with Trivy
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          cache: 'false'
+          version: v0.69.3
           scan-type: fs
           scan-ref: .
           severity: CRITICAL

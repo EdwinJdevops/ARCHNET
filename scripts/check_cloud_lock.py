@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
-"""Verify the explicit cloud deployment safety lock has not been removed.
-
-Static defense-in-depth only: does not evaluate Terraform expressions or plans.
-"""
+"""Reject any executable Terraform configuration beyond the reviewed empty root."""
 from pathlib import Path
-import re
 import sys
 
-root = Path(__file__).resolve().parents[1] / "terraform"
-variables = (root / "variables.tf").read_text(encoding="utf-8")
-main = (root / "main.tf").read_text(encoding="utf-8")
-checks = {
-    "cloud deployment variable defaults false":
-        bool(re.search(r'variable\s+"enable_cloud_deployment"\s*\{[^{}]*\bdefault\s*=\s*false', variables, re.S)),
-    "cloud deployment variable has deny-true validation":
-        bool(re.search(r'condition\s*=\s*var\.enable_cloud_deployment\s*==\s*false', variables)),
-    "EC2 resource is controlled by cloud deployment variable":
-        bool(re.search(r'resource\s+"aws_instance"\s+"k3s"\s*\{\s*count\s*=\s*var\.enable_cloud_deployment\s*\?\s*1\s*:\s*0', main)),
+repo = Path(__file__).resolve().parents[1]
+expected = {
+    "terraform/main.tf": "terraform {\n  required_version = \"= 1.12.2\"\n}\n",
+    "terraform/variables.tf": "variable \"enable_cloud_deployment\" {\n  description = \"Cloud provisioning is disabled.\"\n  type        = bool\n  default     = false\n  nullable    = false\n\n  validation {\n    condition     = var.enable_cloud_deployment == false\n    error_message = \"Cloud deployment is intentionally disabled.\"\n  }\n}\n",
 }
-for label, ok in checks.items():
-    print(("PASS" if ok else "FAIL") + ": " + label)
-sys.exit(0 if all(checks.values()) else 1)
+actual = {
+    path.relative_to(repo).as_posix()
+    for path in repo.rglob("*")
+    if path.name.endswith((".tf", ".tf.json"))
+}
+if actual != expected.keys():
+    sys.exit(f"Unexpected Terraform source inventory: {sorted(actual)}")
+for name, source in expected.items():
+    path = repo / name
+    if path.is_symlink() or path.read_text(encoding="utf-8") != source:
+        sys.exit(f"Terraform source differs from the reviewed cloud-disabled root: {name}")
+print("PASS: provider-free Terraform source and deny-true lock")
