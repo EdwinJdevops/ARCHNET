@@ -12,6 +12,21 @@ A platform engineer reviewing changes to an intentionally cloud-disabled sandbox
 
 The [reproducible benchmark](CLOUD_LOCK_BENCHMARK.md) lets a solo maintainer publish review evidence for clean and regressed configurations. Before expanding scope, look for concrete reports from unrelated teams and record their existing safeguards and unresolved gaps. Adoption, savings and differentiation remain unvalidated.
 
+## Public evidence review
+
+| Source | Observed friction | Scope of the evidence |
+| --- | --- | --- |
+| [Atlantis #3297](https://github.com/runatlantis/atlantis/issues/3297) | A requester wanted isolated planning and reported maintenance cost for provider allowlists. | Supports plan isolation as a concern. The reported workflow includes live infrastructure. |
+| [AWS provider #29141](https://github.com/hashicorp/terraform-provider-aws/issues/29141) | A plan failed to resolve credentials from the configured file. The reporter used an environment variable as a workaround. | A concrete credential failure. No cloud-disabled PR workflow is described. |
+| [Terraform #17034](https://github.com/hashicorp/terraform/issues/17034) | Terraform maintainers describe why plan can read external data even when implicit refresh is disabled. | Explains the mechanism that made ARCHNET's AMI declaration relevant. It is a design record. |
+| [Terragrunt authentication](https://docs.terragrunt.com/features/units/authentication/) | Documents separate read-only plan and read-write apply roles. | A practical alternative when a plan must read live infrastructure. |
+
+The public record corroborates credential and planning friction. The repository audit is the only directly observed example in this review of a cloud-disabled root that still declared live AWS dependencies. Keep the benchmark as a reusable engineering baseline. Expand the product only when another concrete case identifies the same contract and an unmet need.
+
+## Merge verification
+
+The four checks run on the draft PR. Active required-check enforcement on `main` could not be verified from available repository rules access. A green run confirms execution for the tested revision. Before a future merge, inspect the active rule for `main` and confirm it requires the expected checks and protects changes to the workflow and policy. The PR remains draft.
+
 ## Verification baseline
 
 [Run #19](https://github.com/EdwinJdevops/ARCHNET/actions/runs/42384163801) passed validation, Terraform formatting/configuration and Trivy on [the audited commit](https://github.com/EdwinJdevops/ARCHNET/commit/b260163d4861a2f476d35707c024079bf7ecf026). That run did not execute a Terraform plan or start a cluster. Review the checks on the current PR head for the new gates.
