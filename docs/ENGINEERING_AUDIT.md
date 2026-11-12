@@ -10,7 +10,7 @@ A platform engineer reviewing changes to an intentionally cloud-disabled sandbox
 - [Terraform provider mocks](https://developer.hashicorp.com/terraform/language/tests/mocking) suit testing modules with provider resources and data sources when real credentials are unavailable. Here the root intentionally contains no providers or resources, so a real empty plan directly tests the narrower invariant.
 - [Conftest](https://open-policy-agent.github.io/conftest/) can evaluate JSON with reusable policy across repositories. A small plan predicate is enough for this one invariant. Atlantis suits teams that need a coordinated plan/apply workflow and can operate the required trust boundaries. [kind](https://kind.sigs.k8s.io/docs/user/quick-start/) supplies the local cluster directly.
 
-Before expanding scope, ask independent platform engineers for recent examples, how often the review repeats, how they verify it today, and whether they would adopt this check instead of their existing CI. Test one real sandbox PR with a second operator and record time to a reviewable result and any missed regressions. Adoption, savings and differentiation remain unvalidated.
+The [reproducible benchmark](CLOUD_LOCK_BENCHMARK.md) lets a solo maintainer publish review evidence for clean and regressed configurations. Before expanding scope, look for concrete reports from unrelated teams and record their existing safeguards and unresolved gaps. Adoption, savings and differentiation remain unvalidated.
 
 ## Verification baseline
 

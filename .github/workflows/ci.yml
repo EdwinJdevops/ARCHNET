@@ -68,44 +68,10 @@ jobs:
         with:
           terraform_version: 1.12.2
           terraform_wrapper: false
-      - name: Check provider-free source before Terraform execution
-        run: python scripts/check_cloud_lock.py
-      - name: Initialize without remote backend
-        working-directory: terraform
-        run: terraform init -backend=false -input=false
-      - name: Check Terraform formatting
-        working-directory: terraform
-        run: terraform fmt -check -recursive -diff
-      - name: Validate Terraform configuration
-        working-directory: terraform
-        run: terraform validate -no-color
-
+      - name: Benchmark source policy without Terraform execution
+        run: python scripts/benchmark_cloud_lock.py
       - name: Verify empty Terraform plan and deny enablement
-        working-directory: terraform
-        env:
-          CHECKPOINT_DISABLE: '1'
-          AWS_EC2_METADATA_DISABLED: 'true'
-        run: |
-          set -euo pipefail
-          plan_dir=$(mktemp -d)
-          trap 'rm -rf -- "$plan_dir"' EXIT
-          terraform plan -input=false -refresh=false -detailed-exitcode -out="$plan_dir/disabled.tfplan"
-          terraform show -json "$plan_dir/disabled.tfplan" | jq -e '
-            .format_version == "1.2" and .errored == false and
-            .variables.enable_cloud_deployment.value == false and
-            ((.resource_changes // []) | length == 0) and
-            ((.resource_drift // []) | length == 0) and
-            ((.output_changes // {}) | length == 0) and
-            ((.configuration.provider_config // {}) | length == 0) and
-            ((.configuration.root_module.resources // []) | length == 0) and
-            ((.configuration.root_module.module_calls // {}) | length == 0)
-          '
-          if terraform plan -input=false -refresh=false -no-color -var=enable_cloud_deployment=true >"$plan_dir/denied.log" 2>&1; then
-            echo "Cloud enablement unexpectedly passed" >&2
-            exit 1
-          fi
-          cat "$plan_dir/denied.log"
-          grep -F 'Cloud deployment is intentionally disabled.' "$plan_dir/denied.log"
+        run: bash scripts/verify_cloud_plan.sh
 
   kubernetes:
     runs-on: ubuntu-latest
