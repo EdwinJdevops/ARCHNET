@@ -11,7 +11,7 @@ jobs:
       matrix:
         include:
           - repository: terraform-aws-modules/terraform-aws-eks
-            ref: 8a0efdbbc84180a26e0bacfd2b6fcfceac53b3b60
+            ref: v20.37.2
             policy: assume_role_policy
             principal: Service
             expected: eks.amazonaws.com
