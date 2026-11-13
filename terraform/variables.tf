@@ -1,12 +1,11 @@
-variable "aws_region" {
-  default = "us-east-1"
-}
+variable "enable_cloud_deployment" {
+  description = "Cloud provisioning is disabled."
+  type        = bool
+  default     = false
+  nullable    = false
 
-variable "instance_type" {
-  default = "t3.medium"
-}
-
-variable "key_name" {
-  description = "EC2 key pair name (must exist in AWS)"
-  type        = string
+  validation {
+    condition     = var.enable_cloud_deployment == false
+    error_message = "Cloud deployment is intentionally disabled."
+  }
 }

@@ -1,4 +1,4 @@
-name: Archnet CI/CD
+name: Archnet validation
 
 on:
   push:
@@ -6,38 +6,100 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
-      - name: Validate YAML files
+      - name: Validate YAML syntax
+        shell: bash
         run: |
-          find . -name "*.yml" -o -name "*.yaml" | head -20
-          echo "YAML structure validated"
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check PyYAML==6.0.2
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+          paths = sorted([*Path('.').rglob('*.yaml'), *Path('.').rglob('*.yml')])
+          if not paths:
+              raise SystemExit('No YAML files found')
+          for path in paths:
+              with path.open(encoding='utf-8') as stream:
+                  list(yaml.safe_load_all(stream))
+              print('Parsed:', path)
+          PY
 
-      - name: Validate Shell Scripts
+      - name: Validate shell syntax
+        shell: bash
         run: |
-          find . -name "*.sh" -exec bash -n {} \;
-          echo "Shell scripts OK"
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            bash -n "$file"
+          done < <(find . -type f -name '*.sh' -print0)
 
-      - name: Check Project Structure
+      - name: Validate required directories
+        shell: bash
         run: |
-          ls -la
-          echo "terraform/ argocd/ observability/ apps/ docs/ k3s/" | tr ' ' '\n' | while read dir; do
-            [ -d "$dir" ] && echo "OK: $dir exists" || echo "MISSING: $dir"
+          set -euo pipefail
+          for dir in terraform argocd observability apps docs k3s; do
+            test -d "$dir" || { echo "Missing: $dir" >&2; exit 1; }
           done
+
+      - name: Test infrastructure safety guard
+        run: python -m unittest discover -s tests -v
+
+      - name: Verify cloud deployment safety lock
+        run: python scripts/check_cloud_lock.py
+
+  terraform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.12.2
+          terraform_wrapper: false
+      - name: Benchmark source policy without Terraform execution
+        run: python scripts/benchmark_cloud_lock.py
+      - name: Verify empty Terraform plan and deny enablement
+        run: bash scripts/verify_cloud_plan.sh
+
+  kubernetes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install pinned kind CLI
+        run: |
+          GOBIN="$RUNNER_TEMP/bin" go install sigs.k8s.io/kind@v0.30.0
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Verify disposable Kubernetes control plane
+        run: bash scripts/smoke_kind.sh
 
   security:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Run Trivy
-        uses: aquasecurity/trivy-action@master
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          persist-credentials: false
+      - name: Scan filesystem with Trivy
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          cache: 'false'
+          version: v0.69.3
           scan-type: fs
           scan-ref: .
           severity: CRITICAL
-          exit-code: 0
+          exit-code: '1'
