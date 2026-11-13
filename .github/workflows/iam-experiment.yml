@@ -1,0 +1,20 @@
+name: Offline IAM policy experiment
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  offline-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: 1.12.2
+          terraform_wrapper: false
+      - name: Run extracted renderers without network access
+        run: bash scripts/test_offline_iam.sh

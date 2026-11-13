@@ -1,0 +1,52 @@
+terraform {
+  required_providers {
+    aws = {
+      source = "hashicorp/aws"
+      version = "= 5.100.0"
+    }
+  }
+}
+provider "aws" {
+  region = "us-east-1"
+  access_key = "offline-fixture"
+  secret_key = "offline-fixture"
+  skip_credentials_validation = true
+  skip_requesting_account_id = true
+  skip_metadata_api_check = true
+  skip_region_validation = true
+}
+locals {
+  create                       = true
+  create_outposts_local_cluster = false
+}
+variable "create_iam_role" {
+  default = true
+}
+data "aws_iam_policy_document" "assume_role_policy" {
+  count = local.create && var.create_iam_role ? 1 : 0
+
+  statement {
+    sid = "EKSClusterAssumeRole"
+    actions = [
+      "sts:AssumeRole",
+      "sts:TagSession",
+    ]
+
+    principals {
+      type        = "Service"
+      identifiers = ["eks.amazonaws.com"]
+    }
+
+    dynamic "principals" {
+      for_each = local.create_outposts_local_cluster ? [1] : []
+
+      content {
+        type        = "Service"
+        identifiers = ["ec2.amazonaws.com"]
+      }
+    }
+  }
+}
+output "principal_matches" {
+  value = try(jsondecode(data.aws_iam_policy_document.assume_role_policy[0].json).Statement[0].Principal.Service == "eks.amazonaws.com", false)
+}
