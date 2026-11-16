@@ -1,0 +1,98 @@
+name: Full module IAM acceptance
+on: pull_request
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - repository: terraform-aws-modules/terraform-aws-eks
+            ref: v20.37.2
+            policy: assume_role_policy
+            principal: Service
+            expected: eks.amazonaws.com
+          - repository: cloudposse/terraform-aws-eks-iam-role
+            ref: 0c2347ca06fb54579a0e57d03e20aed3c1045157
+            policy: service_account_assume_role
+            principal: Federated
+            expected: arn:aws:iam::111122223333:oidc-provider/example.invalid
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: ${{ matrix.repository }}
+          ref: ${{ matrix.ref }}
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: 1.12.2
+          terraform_wrapper: false
+      - name: Test actual policy from upstream root
+        shell: bash
+        env:
+          POLICY: ${{ matrix.policy }}
+          PRINCIPAL: ${{ matrix.principal }}
+          EXPECTED: ${{ matrix.expected }}
+          CHECKPOINT_DISABLE: '1'
+        run: |
+          set -euo pipefail
+          mkdir archnet-tests
+          cat > archnet-tests/policy.tftest.hcl <<EOF
+          provider "aws" {
+            region = "us-east-1"
+            access_key = "offline-fixture"
+            secret_key = "offline-fixture"
+            skip_credentials_validation = true
+            skip_requesting_account_id = true
+            skip_metadata_api_check = true
+            skip_region_validation = true
+          }
+
+          run "policy" {
+            command = plan
+            plan_options {
+              refresh = false
+              target = [data.aws_iam_policy_document.$POLICY]
+            }
+            assert {
+              condition = jsondecode(data.aws_iam_policy_document.$POLICY[0].json).Statement[0].Principal.$PRINCIPAL == "$EXPECTED"
+              error_message = "ARCHNET_PRINCIPAL_MISMATCH"
+            }
+          }
+          EOF
+          if [[ "$PRINCIPAL" == Federated ]]; then
+            cat >> archnet-tests/policy.tftest.hcl <<'EOF'
+
+          variables {
+            eks_cluster_oidc_issuer_url = "https://example.invalid"
+            service_account_namespace = "default"
+            service_account_name = "example"
+          }
+
+          override_data {
+            target = data.aws_caller_identity.current[0]
+            override_during = plan
+            values = { account_id = "111122223333" }
+          }
+          EOF
+          fi
+          terraform init -backend=false -input=false
+          tf=$(command -v terraform)
+          run_offline() {
+            sudo unshare --net -- env -i PATH=/usr/bin:/bin CHECKPOINT_DISABLE=1 AWS_EC2_METADATA_DISABLED=true "$tf" test -test-directory=archnet-tests -no-color
+          }
+          run_offline
+          if [[ "$PRINCIPAL" == Service ]]; then
+            sed -i '0,/identifiers = \["eks.amazonaws.com"\]/{s/identifiers = \["eks.amazonaws.com"\]/identifiers = ["ec2.amazonaws.com"]/;}' main.tf
+          else
+            sed -i 's/account_id = "111122223333"/account_id = "444455556666"/' archnet-tests/policy.tftest.hcl
+          fi
+          if run_offline > "$RUNNER_TEMP/negative.log" 2>&1; then
+            echo "Changed principal passed unexpectedly" >&2
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/negative.log"
+          grep -Fx 'ARCHNET_PRINCIPAL_MISMATCH' "$RUNNER_TEMP/negative.log"
