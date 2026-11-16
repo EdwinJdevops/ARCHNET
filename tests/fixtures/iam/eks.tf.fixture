@@ -1,3 +1,4 @@
+# Modified for the ARCHNET offline policy experiment. See THIRD_PARTY_NOTICES.md.
 terraform {
   required_providers {
     aws = {
