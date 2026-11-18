@@ -1,0 +1,73 @@
+name: UK Trade IAM evidence
+on: pull_request
+permissions:
+  contents: read
+jobs:
+  uktrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: uktrade/terraform-platform-modules
+          ref: 40708174258425b82d845951245a311de7a73f0a
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: 1.12.2
+          terraform_wrapper: false
+      - name: Verify original and changed rendered policy
+        working-directory: environment-pipelines
+        run: |
+          set -euo pipefail
+          mkdir archnet-tests
+          sed -n '/^variables {/,/^}/p' tests/unit.tftest.hcl | sed '/^  expected_tags = {/,/^  }/d' > archnet-tests/policy.tftest.hcl
+          cat >> archnet-tests/policy.tftest.hcl <<'EOF'
+          provider "aws" {
+            region = "eu-west-2"
+            access_key = "offline-fixture"
+            secret_key = "offline-fixture"
+            skip_credentials_validation = true
+            skip_requesting_account_id = true
+            skip_metadata_api_check = true
+            skip_region_validation = true
+          }
+          override_data {
+            target = data.aws_caller_identity.current
+            override_during = plan
+            values = { account_id = "000123456789" }
+          }
+          run "render_policy" {
+            command = plan
+            plan_options {
+              refresh = false
+              target = [data.aws_iam_policy_document.iam]
+            }
+            assert {
+              condition = contains(jsondecode(data.aws_iam_policy_document.iam.json).Statement[0].Action, "iam:CreateRole")
+              error_message = "ARCHNET_CREATE_ROLE_MISSING"
+            }
+          }
+          EOF
+          CHECKPOINT_DISABLE=1 terraform init -backend=false -input=false
+          tf=$(command -v terraform)
+          offline() {
+            sudo unshare --net -- env -i PATH=/usr/bin:/bin CHECKPOINT_DISABLE=1 AWS_EC2_METADATA_DISABLED=true "$tf" test -test-directory=archnet-tests -no-color
+          }
+          offline
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("iam.tf")
+          source = path.read_text()
+          start = source.index('data "aws_iam_policy_document" "iam" {')
+          end = source.index('\n}', start)
+          block = source[start:end]
+          assert block.count('"iam:CreateRole"') == 1
+          path.write_text(source[:start] + block.replace('"iam:CreateRole"', '"iam:GetUser"') + source[end:])
+          PY
+          if offline > "$RUNNER_TEMP/mutated.log" 2>&1; then
+            echo 'Mutation unexpectedly passed' >&2
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/mutated.log"
+          grep -Fx ARCHNET_CREATE_ROLE_MISSING "$RUNNER_TEMP/mutated.log"
