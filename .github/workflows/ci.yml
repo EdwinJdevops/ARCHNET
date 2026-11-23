@@ -101,5 +101,5 @@ jobs:
           version: v0.69.3
           scan-type: fs
           scan-ref: .
-          severity: CRITICAL
+          severity: HIGH,CRITICAL
           exit-code: '1'
