@@ -1,7 +1,9 @@
 # Maintainers
 
-| Maintainer | GitHub | Affiliation |
+| Name | GitHub ID | Company/Organization |
 | --- | --- | --- |
-| Repository owner | [EdwinJdevops](https://github.com/EdwinJdevops) | Independent project |
+| Edwin Jonathan | [EdwinJdevops](https://github.com/EdwinJdevops) | AuroraPlatforminfra (self-reported GitHub affiliation) |
 
-Use [GitHub Issues](https://github.com/EdwinJdevops/ARCHNET/issues) for bugs and usage questions.
+Country: Nigeria. Contact: edwinjonathanchibuike123@gmail.com.
+
+The maintainer reviews contributions and publishes releases after required checks pass. Use GitHub Issues for bugs and usage questions.
