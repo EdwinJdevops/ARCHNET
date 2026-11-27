@@ -29,3 +29,5 @@ A mock can return valid JSON even when the policy source regresses. In the pinne
 Use the [EKS and Cloud Posse examples](.github/workflows/full-module-iam.yml) for trust principals. These recipes use native Terraform. The experiments establish regression detection for the tested policies. Setup savings, full untargeted plans, and production behavior remain unverified.
 
 [Deployment safety and local Kubernetes](docs/DEPLOYMENT_SAFETY.md) · [Engineering audit](docs/ENGINEERING_AUDIT.md) · [Maintainer contact](MAINTAINERS.md) · [Apache 2.0](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.md)
+
+For prerequisites, adaptation steps and a fair native Terraform comparison, see the [engineer adoption guide](docs/ADOPTION.md).
